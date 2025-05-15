@@ -1,0 +1,268 @@
+---
+title: "APM1205_FINALS_Code"
+author: "BAYBAYON, DARLYN ANTOINETTE B.; MAYOL, JOSE RAPHAEL J."
+date: "2025-05-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Dataset
+
+```{r}
+df <- read.csv("celebrity_df_2.csv")
+head(df)
+```
+
+## Removal of Unneeded Columns
+
+```{r}
+df <- subset(df, select = -c(famas_wsp,gawad_wsp,mmff_wsp))
+head(df)
+```
+
+```{r}
+library(tidyverse)
+library(car)
+```
+
+## Addresing NA Values
+
+```{r}
+df %>%
+  summarise_all(~sum(is.na(.)))
+```
+
+```{r}
+df <- df %>%
+  mutate(education = ifelse(is.na(education), median(education, na.rm = TRUE), education))
+```
+
+```{r}
+df %>%
+  summarise_all(~sum(is.na(.)))
+```
+
+## Converting *education* to factor
+
+```{r}
+df$education <- as.factor(df$education)
+```
+
+# Model 1 (Original)
+
+## Model Fitting
+
+```{r}
+model <- glm(politics~years_active+imdb_credits+family+education+wins, family="binomial", data=df)
+summary(model)
+```
+
+## McFadden's pesudo R-squared
+
+```{r}
+pscl::pR2(model)["McFadden"]
+```
+
+## Check: No Multicollinearity
+
+```{r}
+vif(model)
+```
+
+## Check: No Extreme Outliers
+
+```{r}
+plot(model,5)
+```
+
+## Check: Independent Observations
+
+```{r}
+plot(model$residuals)
+```
+
+# Model 2 (first removal of outliers)
+
+## Model Fitting
+
+```{r}
+df_no_outliers <- df[-c(18, 66, 86), ]
+model_no_outliers <- glm(politics ~ years_active + imdb_credits + family + education + wins, 
+                         family = binomial, data = df_no_outliers)
+summary(model_no_outliers)
+```
+
+## Check: No Multicollinearity
+
+```{r}
+vif(model_no_outliers)
+```
+
+## Check: No Extreme Outliers
+
+```{r}
+plot(model_no_outliers,5)
+```
+
+## Check: Independent Observations
+
+```{r}
+plot(model_no_outliers$residuals)
+```
+
+## McFadden's pesudo R-squared
+
+```{r}
+pscl::pR2(model_no_outliers)["McFadden"]
+```
+
+# Model 3 - Final (second removal of outliers)
+
+## Model Fitting
+
+```{r}
+df_no_outliers1 <- df[-c(18, 20, 66, 86, 94, 116), ]
+model_no_outliers1 <- glm(politics ~ years_active + imdb_credits + family + education + wins, 
+                         family = binomial, data = df_no_outliers1)
+summary(model_no_outliers1)
+```
+
+## Check: No Multicollinearity
+
+```{r}
+vif(model_no_outliers1)
+```
+
+## Check: No Extreme Outliers
+
+```{r}
+plot(model_no_outliers1,5)
+```
+
+## Check: Independent Observations
+
+```{r}
+plot(model_no_outliers1$residuals)
+```
+
+## McFadden's pesudo R-squared
+
+```{r}
+pscl::pR2(model_no_outliers1)["McFadden"]
+```
+
+## Check: Linear Relation Between Explanatory Variables and Logit of the Response
+
+```{r}
+df_no_outliers1$log_imdb <- log(df_no_outliers1$imdb_credits + 1) * df_no_outliers1$imdb_credits
+df_no_outliers1$log_yrs <- log(df_no_outliers1$years_active + 1) * df_no_outliers1$years_active
+
+box_tidwell_no_outliers1 <- glm(politics ~ years_active + log_yrs + imdb_credits + log_imdb + family + education + wins, 
+                         family = binomial, data = df_no_outliers1)
+
+summary(box_tidwell_no_outliers1)
+```
+
+# Model Evaluation
+
+## Prediction Column
+
+```{r}
+df_test <- df_no_outliers1
+df_test$predicted_prob <- predict(model_no_outliers1, type = "response")
+```
+
+```{r}
+df_test$predicted_class <- ifelse(df_test$predicted_prob > 0.45, 1, 0)
+```
+
+## Confusion Matrix
+
+```{r}
+library(caret)
+```
+
+```{r}
+conf_matrix <- confusionMatrix(factor(df_test$predicted_class), factor(df_test$politics))
+conf_matrix
+```
+
+# Testing
+
+## Vilma
+
+```{r}
+vilma <- data.frame(
+  years_active = 62,
+  imdb_credits = 231,
+  family = 2,
+  education = as.factor(4),
+  wins = 18
+)
+vilma_prob <- predict(model_no_outliers1, vilma, type = "response")
+vilma_class <- ifelse(vilma_prob > 0.45, 1, 0)
+vilma_class
+```
+
+## Bong Revilla (assume only HS graduate)
+
+```{r}
+bong_hs <- data.frame(
+  years_active = 42,
+  imdb_credits = 100,
+  family = 6,
+  education = as.factor(1),
+  wins = 2
+)
+bong_hs_prob <- predict(model_no_outliers1, bong_hs, type = "response")
+bong_hs_class <- ifelse(bong_hs_prob > 0.45, 1, 0)
+bong_hs_class
+```
+
+## Coco Martin
+
+```{r}
+coco <- data.frame(
+  years_active = 24,
+  imdb_credits = 66,
+  family = 0,
+  education = as.factor(2),
+  wins = 1
+)
+coco_prob <- predict(model_no_outliers1, coco, type = "response")
+coco_class <- ifelse(coco_prob > 0.45, 1, 0)
+coco_class
+```
+
+## Willie
+
+```{r}
+wowowie <- data.frame(
+  years_active = 38,
+  imdb_credits = 38,
+  family = 0,
+  education = as.factor(0),
+  wins = 0
+)
+wowowie_prob <- predict(model_no_outliers1, wowowie, type = "response")
+wowowie_class <- ifelse(wowowie_prob > 0.45, 1, 0)
+wowowie_class
+```
+
+## Jolo Revilla
+
+```{r}
+jolo <- data.frame(
+  years_active = 19,
+  imdb_credits = 19,
+  family = 2,
+  education = as.factor(2),
+  wins = 0
+)
+jolo_prob <- predict(model_no_outliers1, jolo, type = "response")
+jolo_class <- ifelse(jolo_prob > 0.45, 1, 0)
+jolo_class
+```
